@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -85,7 +85,14 @@ class DocumentResponse(DocumentBase):
     parser_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional parser metadata")
     content_processed: bool = Field(default=False, description="Whether content was successfully processed")
     content_processing_date: Optional[datetime] = Field(None, description="When content was processed")
-    
+
+    # Enterprise intelligence
+    summary: Optional[str] = Field(None, description="Executive summary")
+    classification_confidence: Optional[float] = Field(None, description="Classification confidence")
+    extracted_metadata: Optional[Dict[str, Any]] = Field(None, description="Type-specific extracted metadata")
+    compliance_report: Optional[Dict[str, Any]] = Field(None, description="Compliance analysis report")
+    agent_executions: Optional[List[Dict[str, Any]]] = Field(None, description="Agent workflow telemetry")
+
     # Timestamps
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")

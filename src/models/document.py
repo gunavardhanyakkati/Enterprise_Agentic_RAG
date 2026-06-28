@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from src.db.interfaces.postgresql import Base
@@ -47,6 +47,19 @@ class Document(Base):
     parser_metadata = Column(JSON, nullable=True)
     content_processed = Column(Boolean, default=False, nullable=False)
     content_processing_date = Column(DateTime, nullable=True)
+
+    # Enterprise intelligence (STEP 2)
+    summary = Column(Text, nullable=True)
+    classification_confidence = Column(Float, nullable=True)
+    extracted_metadata = Column(JSON, nullable=True)
+    compliance_report = Column(JSON, nullable=True)
+    agent_executions = Column(JSON, nullable=True)
+    
+    # Explainability & Caching (STEP 3)
+    classification_reasoning = Column(JSON, nullable=True)
+    compliance_reasoning = Column(JSON, nullable=True)
+    agent_execution_metadata = Column(JSON, nullable=True)
+    confidence_reasoning = Column(JSON, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

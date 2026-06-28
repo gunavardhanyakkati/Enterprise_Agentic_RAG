@@ -1,5 +1,6 @@
 from typing import Optional
 
+from src.config import Settings, get_settings
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
 from src.services.langfuse.client import LangfuseTracer
 from src.services.ollama.client import OllamaClient
@@ -16,6 +17,7 @@ def make_agentic_rag_service(
     langfuse_tracer: Optional[LangfuseTracer] = None,
     top_k: int = 3,
     use_hybrid: bool = True,
+    model: Optional[str] = None,
 ) -> AgenticRAGService:
     """
     Create AgenticRAGService with dependency injection.
@@ -35,6 +37,7 @@ def make_agentic_rag_service(
     graph_config = GraphConfig(
         top_k=top_k,
         use_hybrid=use_hybrid,
+        model=model or get_settings().ollama_model,
     )
 
     return AgenticRAGService(

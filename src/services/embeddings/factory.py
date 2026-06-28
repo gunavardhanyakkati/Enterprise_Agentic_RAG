@@ -1,39 +1,23 @@
-from typing import Optional
+from typing import Optional, Union
 
 from src.config import Settings, get_settings
 
 from .jina_client import JinaEmbeddingsClient
+from .local_client import LocalEmbeddingsClient
+
+EmbeddingsClient = Union[JinaEmbeddingsClient, LocalEmbeddingsClient]
 
 
-def make_embeddings_service(settings: Optional[Settings] = None) -> JinaEmbeddingsClient:
-    """Factory function to create embeddings service.
-
-    Creates a new client instance each time to avoid closed client issues.
-
-    :param settings: Optional settings instance
-    :returns: JinaEmbeddingsClient instance
-    """
+def make_embeddings_service(settings: Optional[Settings] = None) -> EmbeddingsClient:
+    """Create embeddings client based on configured provider."""
     if settings is None:
         settings = get_settings()
 
-    # Get API key from settings
-    api_key = settings.jina_api_key
+    if settings.embeddings.provider == "local":
+        return LocalEmbeddingsClient(model_name=settings.embeddings.local_model)
 
-    return JinaEmbeddingsClient(api_key=api_key)
+    return JinaEmbeddingsClient(api_key=settings.jina_api_key)
 
 
-def make_embeddings_client(settings: Optional[Settings] = None) -> JinaEmbeddingsClient:
-    """Factory function to create embeddings client.
-
-    Creates a new client instance each time to avoid closed client issues.
-
-    :param settings: Optional settings instance
-    :returns: JinaEmbeddingsClient instance
-    """
-    if settings is None:
-        settings = get_settings()
-
-    # Get API key from settings
-    api_key = settings.jina_api_key
-
-    return JinaEmbeddingsClient(api_key=api_key)
+def make_embeddings_client(settings: Optional[Settings] = None) -> EmbeddingsClient:
+    return make_embeddings_service(settings)

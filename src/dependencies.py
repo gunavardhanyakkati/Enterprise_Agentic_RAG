@@ -19,6 +19,7 @@ from src.services.agents.factory import make_agentic_rag_service
 from src.services.arxiv.client import ArxivClient
 from src.services.cache.client import CacheClient
 from src.services.document_sources.factory import make_document_source
+from src.services.embeddings.factory import EmbeddingsClient, make_embeddings_service
 from src.services.embeddings.jina_client import JinaEmbeddingsClient
 from src.services.indexing.hybrid_indexer import HybridIndexingService
 from src.services.langfuse.client import LangfuseTracer
@@ -68,7 +69,7 @@ def get_pdf_parser(request: Request) -> PDFParserService:
     return request.app.state.pdf_parser
 
 
-def get_embeddings_service(request: Request) -> JinaEmbeddingsClient:
+def get_embeddings_service(request: Request) -> EmbeddingsClient:
     """Get embeddings service from the request state."""
     return request.app.state.embeddings_service
 
@@ -153,7 +154,7 @@ def get_audit_logger(request: Request) -> AuditLogger:
 def get_agentic_rag_service(
     opensearch: Annotated[OpenSearchClient, Depends(get_opensearch_client)],
     ollama: Annotated[OllamaClient, Depends(get_ollama_client)],
-    embeddings: Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)],
+    embeddings: Annotated[EmbeddingsClient, Depends(get_embeddings_service)],
     langfuse: Annotated[LangfuseTracer, Depends(get_langfuse_tracer)],
     user: Annotated[User, Depends(get_current_user)],  # NEW: User context
     settings: Annotated[Settings, Depends(get_settings)],
@@ -172,11 +173,7 @@ def get_version_control_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> VersionControlService:
     """Get version control service."""
-    from src.repositories.document import DocumentRepository
-    from src.services.document_lifecycle.version_control_service import VersionControlService
-    
-    repository = DocumentRepository(session)
-    return VersionControlService(repository=repository)
+    return VersionControlService(db_session=session)
 
 
 def get_retention_service(
@@ -191,13 +188,14 @@ def get_retention_service(
     return RetentionService(repository=repository, audit_logger=audit_logger)
 
 
+SettingsDep = Annotated[Settings, Depends(get_request_settings)]
 AgenticRAGDep = Annotated[AgenticRAGService, Depends(get_agentic_rag_service)]
 DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
 ArxivDep = Annotated[ArxivClient, Depends(get_arxiv_client)]
 PDFParserDep = Annotated[PDFParserService, Depends(get_pdf_parser)]
-EmbeddingsDep = Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)]
+EmbeddingsDep = Annotated[EmbeddingsClient, Depends(get_embeddings_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
 LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
 CacheDep = Annotated[CacheClient | None, Depends(get_cache_client)]

@@ -1,9 +1,11 @@
 import logging
+import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 
 from src.dependencies import (
     AccessControlDep,
@@ -12,23 +14,20 @@ from src.dependencies import (
     UserDep,
     VersionControlDep,
 )
-from src.models.document import Document
 from src.repositories.document import DocumentRepository
 from src.schemas.document.document import DocumentResponse, DocumentVersion
-from src.schemas.document.document_create import DocumentCreate
-from src.schemas.common.security import User
-from src.services.document_ingestion.ingestion_service import IngestionService
-from src.services.security.access_control_service import AccessControlService
-from src.services.security.audit_logger import AuditLogger
-from src.services.document_lifecycle.version_control_service import VersionControlService
+from src.services.document_ingestion.upload_pipeline import UploadPipelineService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/documents", tags=["document-management"])
+router = APIRouter(prefix="/documents", tags=["document-management"])
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    user: UserDep,
+    audit_logger: AuditLoggerDep,
+    session: SessionDep,
     file: UploadFile = File(..., description="Document file to upload"),
     title: str = Form(..., description="Document title"),
     description: str = Form(..., description="Document description"),
@@ -36,123 +35,87 @@ async def upload_document(
     access_level: str = Form(..., description="Access level classification"),
     document_type: str = Form(..., description="Document type"),
     expiry_date: Optional[str] = Form(None, description="Optional expiration date (ISO format)"),
-    user: User = UserDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
-    """Upload and ingest a new document.
-    
-    Args:
-        file: The uploaded document file
-        title: Document title
-        description: Document description
-        department: Owning department
-        access_level: Access classification level
-        document_type: Type of document
-        expiry_date: Optional expiration date
-        user: Authenticated user
-        audit_logger: Audit logger
-        
-    Returns:
-        Created document response
-        
-    Raises:
-        HTTPException: If upload or processing fails
-    """
+    """Upload and ingest a document through the full pipeline."""
     try:
         logger.info(f"Document upload initiated by user: {user.username}")
-        
-        # Validate access level
-        if not audit_logger.settings.security.rbac_enabled:
-            # RBAC disabled - allow any access level
-            pass
-        elif access_level not in user.access_levels:
-            logger.warning(
-                f"User {user.username} attempted to upload document with access level "
-                f"{access_level}, but only has: {user.access_levels}"
-            )
+
+        if audit_logger.settings.security.rbac_enabled and access_level not in user.access_levels:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Cannot create document with access level '{access_level}'. "
                 f"Your allowed levels: {', '.join(user.access_levels)}",
             )
 
-        # Save uploaded file to temporary location
+        if not file.filename:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Filename is required")
+
         upload_dir = Path("./data/uploads")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        file_path = upload_dir / f"{uuid.uuid4()}_{file.filename}"
-        
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        logger.debug(f"Saved uploaded file to: {file_path}")
+        safe_name = Path(file.filename).name
+        stored_path = upload_dir / f"{uuid.uuid4()}_{safe_name}"
 
-        # Process and ingest the document
-        from src.database import get_db_session
-        
-        with get_db_session() as session:
-            repository = DocumentRepository(session)
-            ingestion_service = IngestionService(
-                settings=user.settings,
-                document_repository=repository,
-                version_control_service=VersionControlService(repository=repository),
-                audit_logger=audit_logger,
-            )
-            
-            document_id = await ingestion_service.ingest_single_document(
-                file_path=file_path,
-                user_id=user.id,
-                document_metadata={
-                    "title": title,
-                    "description": description,
-                    "department": department,
-                    "access_level": access_level,
-                    "document_type": document_type,
-                    "expiry_date": expiry_date,
-                },
-            )
-            
-            # Fetch the created document
-            document = repository.get_by_document_id(document_id)
-            if not document:
+        content = await file.read()
+        stored_path.write_bytes(content)
+
+        parsed_expiry = None
+        if expiry_date:
+            try:
+                parsed_expiry = datetime.fromisoformat(expiry_date.replace("Z", "+00:00"))
+            except ValueError as exc:
                 raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Document created but could not be retrieved",
-                )
-            
-            # Log successful upload
-            audit_logger.log_document_modification(
-                user=user,
-                document_id=document_id,
-                action="upload",
-                changes={
-                    "title": title,
-                    "department": department,
-                    "access_level": access_level,
-                    "file_size": file_path.stat().st_size,
-                },
-            )
-            
-            logger.info(f"Document uploaded successfully: {document_id}")
-            return document
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="expiry_date must be ISO format (e.g. 2026-12-31T00:00:00)",
+                ) from exc
+
+        pipeline = UploadPipelineService(session=session)
+        document = await pipeline.process_upload(
+            file_path=stored_path,
+            original_filename=safe_name,
+            title=title,
+            description=description,
+            department=department,
+            access_level=access_level,
+            document_type=document_type,
+            owner_id=user.id,
+            expiry_date=parsed_expiry,
+        )
+
+        audit_logger.log_document_modification(
+            user=user,
+            document_id=document.document_id,
+            action="upload",
+            changes={
+                "title": title,
+                "department": department,
+                "access_level": access_level,
+                "file_size": stored_path.stat().st_size,
+                "chunks_indexed": (document.parser_metadata or {}).get("indexing", {}).get("chunks_indexed", 0),
+            },
+        )
+
+        logger.info(f"Document uploaded and indexed: {document.document_id}")
+        return document
 
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Document upload failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload document: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 def get_document(
     document_id: str,
-    user: User = UserDep,
+    user: UserDep,
     session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
 ):
     """Get a specific document by ID.
     
@@ -211,14 +174,14 @@ def get_document(
 
 @router.get("/", response_model=List[DocumentResponse])
 def list_documents(
+    user: UserDep,
+    session: SessionDep,
+    access_control: AccessControlDep,
     department: Optional[str] = Query(None, description="Filter by department"),
     access_level: Optional[str] = Query(None, description="Filter by access level"),
     document_type: Optional[str] = Query(None, description="Filter by document type"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of documents"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    user: User = UserDep,
-    session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
 ):
     """List documents with optional filtering.
     
@@ -284,13 +247,13 @@ def list_documents(
 @router.put("/{document_id}", response_model=DocumentResponse)
 def update_document(
     document_id: str,
+    user: UserDep,
+    session: SessionDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     access_level: Optional[str] = Form(None),
-    user: User = UserDep,
-    session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Update an existing document.
     
@@ -390,10 +353,10 @@ def update_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     document_id: str,
-    user: User = UserDep,
+    user: UserDep,
     session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
 ):
     """Delete (soft delete) a document.
     
@@ -458,12 +421,12 @@ def delete_document(
 @router.get("/{document_id}/versions", response_model=List[DocumentVersion])
 def get_document_versions(
     document_id: str,
+    user: UserDep,
+    session: SessionDep,
+    access_control: AccessControlDep,
+    version_control: VersionControlDep,
     limit: int = Query(10, ge=1, le=100, description="Maximum versions to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    user: User = UserDep,
-    session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
-    version_control: VersionControlService = VersionControlDep,
 ):
     """Get version history for a document.
     
@@ -501,11 +464,8 @@ def get_document_versions(
                 detail="You do not have permission to view versions of this document",
             )
         
-        versions = version_control.get_versions(document_id, limit=limit, offset=offset)
-        
-        logger.info(f"Retrieved {len(versions)} versions for document {document_id}")
-        
-        return versions
+        versions = version_control.get_version_history(document_id)
+        return versions[offset : offset + limit]
         
     except HTTPException:
         raise
@@ -520,12 +480,12 @@ def get_document_versions(
 @router.post("/{document_id}/versions/revert", response_model=DocumentResponse)
 def revert_document_version(
     document_id: str,
-    version: int = Form(..., description="Version number to revert to"),
-    user: User = UserDep,
+    user: UserDep,
     session: SessionDep,
-    access_control: AccessControlService = AccessControlDep,
-    version_control: VersionControlService = VersionControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
+    access_control: AccessControlDep,
+    version_control: VersionControlDep,
+    audit_logger: AuditLoggerDep,
+    version: int = Form(..., description="Version number to revert to"),
 ):
     """Revert a document to a previous version.
     
@@ -549,6 +509,36 @@ def revert_document_version(
         
         repository = DocumentRepository(session)
         document = repository.get_by_document_id(document_id)
-        
+
         if not document:
-           
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document not found: {document_id}",
+            )
+
+        if not access_control.can_access_document(user, document):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to revert this document",
+            )
+
+        reverted = version_control.rollback_to_version(document.id, version)
+
+        audit_logger.log_document_modification(
+            user=user,
+            document_id=document_id,
+            action="revert",
+            changes={"reverted_to_version": version, "new_version": reverted.version},
+        )
+
+        logger.info(f"Document {document_id} reverted to version {version}")
+        return reverted
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reverting document {document_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to revert document version",
+        )

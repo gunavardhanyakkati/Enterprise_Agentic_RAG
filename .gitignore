@@ -178,5 +178,11 @@ data/
 test_output/
 test_data/
 
+# Node.js dependencies and builds
+node_modules/
+dist/
+.eslintcache
+.vite-cache/
+
 
 

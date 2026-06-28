@@ -94,10 +94,40 @@ class ChunkingSettings(BaseConfigSettings):
         case_sensitive=False,
     )
 
-    chunk_size: int = 600
-    overlap_size: int = 100
-    min_chunk_size: int = 100
-    section_based: bool = True
+    chunk_size: int = 1000
+    overlap_size: int = 200
+    min_chunk_size: int = 50
+    section_based: bool = False
+
+
+class EmbeddingsSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="EMBEDDINGS__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    provider: Literal["local", "jina"] = "local"
+    local_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    local_dimension: int = 384
+
+
+class GeminiSettings(BaseConfigSettings):
+    model_config = SettingsConfigDict(
+        env_file=[".env", str(ENV_FILE_PATH)],
+        env_prefix="GEMINI__",
+        extra="ignore",
+        frozen=True,
+        case_sensitive=False,
+    )
+
+    api_key: str = ""
+    model: str = "gemini-2.0-flash"
+    enabled: bool = True
+    auto_run_on_upload: bool = True
+    max_content_chars: int = 30000
 
 
 class OpenSearchSettings(BaseConfigSettings):
@@ -113,7 +143,7 @@ class OpenSearchSettings(BaseConfigSettings):
     index_name: str = "enterprise-documents"
     chunk_index_suffix: str = "chunks"
     max_text_size: int = 1000000
-    vector_dimension: int = 1024
+    vector_dimension: int = 384
     vector_space_type: str = "cosinesimil"
     rrf_pipeline_name: str = "hybrid-rrf-pipeline"
     hybrid_search_size_multiplier: int = 2
@@ -188,11 +218,13 @@ class Settings(BaseConfigSettings):
 
     jina_api_key: str = ""
 
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     pdf_parser: PDFParserSettings = Field(default_factory=PDFParserSettings)
     enterprise_source: EnterpriseSourceSettings = Field(default_factory=EnterpriseSourceSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     document_lifecycle: DocumentLifecycleSettings = Field(default_factory=DocumentLifecycleSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
+    embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
     opensearch: OpenSearchSettings = Field(default_factory=OpenSearchSettings)
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.config import get_settings
 from src.db.factory import make_database
 from src.middlewares import (
@@ -12,7 +13,7 @@ from src.middlewares import (
     AuthMiddleware,
     PerformanceMonitoringMiddleware,
 )
-from src.routers import agentic_ask, document_management, hybrid_search, ping
+from src.routers import agentic_ask, document_management, enterprise_intelligence, hybrid_search, ping
 from src.routers.admin import audit
 from src.routers.auth import login
 from src.services.cache.factory import make_cache_client
@@ -144,6 +145,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Register middleware
 app.add_middleware(AuthMiddleware)
 app.add_middleware(AccessControlMiddleware)
@@ -157,6 +171,7 @@ app.include_router(hybrid_search.router, prefix="/api/v1")  # Search with access
 app.include_router(document_management.router, prefix="/api/v1")  # Document CRUD
 app.include_router(login.router, prefix="/api/v1")  # Authentication
 app.include_router(audit.router)  # Admin audit endpoints
+app.include_router(enterprise_intelligence.router)  # Gemini enterprise agents
 app.include_router(agentic_ask.router)  # Agentic RAG with security
 
 logger.info("API routers registered and application ready")

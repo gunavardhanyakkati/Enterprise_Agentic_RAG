@@ -5,7 +5,7 @@ Manages document lifecycle based on retention policies and expiry dates.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session

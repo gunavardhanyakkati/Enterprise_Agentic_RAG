@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from src.dependencies import AuthDep, AuditLoggerDep
+from src.dependencies import AuthDep, AuditLoggerDep, UserDep
 from src.schemas.common.security import LoginRequest, LoginResponse, User
 from src.services.security.auth_service import AuthService
 from src.services.security.audit_logger import AuditLogger
@@ -16,9 +16,9 @@ router = APIRouter(tags=["authentication"])
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    auth_service: AuthDep,
+    audit_logger: AuditLoggerDep,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    auth_service: AuthService = AuthDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
     ip_address: Optional[str] = None,
 ):
     """Authenticate user and return JWT access token.
@@ -101,8 +101,8 @@ async def login(
 @router.post("/login/json", response_model=LoginResponse)
 async def login_json(
     login_request: LoginRequest,
-    auth_service: AuthService = AuthDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
+    auth_service: AuthDep,
+    audit_logger: AuditLoggerDep,
     ip_address: Optional[str] = None,
 ):
     """Alternative login endpoint that accepts JSON payload instead of form data.
@@ -180,7 +180,7 @@ async def login_json(
 
 @router.get("/me", response_model=User)
 async def get_current_user_info(
-    user: User = Depends(get_current_user),
+    user: UserDep,
 ):
     """Get information about the currently authenticated user.
     
@@ -196,8 +196,8 @@ async def get_current_user_info(
 
 @router.post("/logout")
 async def logout(
-    user: User = Depends(get_current_user),
-    audit_logger: AuditLogger = AuditLoggerDep,
+    user: UserDep,
+    audit_logger: AuditLoggerDep,
 ):
     """Logout endpoint for audit logging purposes.
     

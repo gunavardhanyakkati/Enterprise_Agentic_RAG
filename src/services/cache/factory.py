@@ -7,6 +7,22 @@ from src.services.cache.client import CacheClient
 logger = logging.getLogger(__name__)
 
 
+class InMemoryRedis:
+    """Mock Redis client using local memory fallback."""
+    def __init__(self):
+        self._data = {}
+
+    def get(self, key: str):
+        return self._data.get(key)
+
+    def set(self, key: str, value: str, ex=None) -> bool:
+        self._data[key] = value
+        return True
+
+    def ping(self) -> bool:
+        return True
+
+
 def make_redis_client(settings: Settings) -> redis.Redis:
     """Create Redis client with connection pooling."""
     redis_settings = settings.redis
@@ -38,12 +54,14 @@ def make_redis_client(settings: Settings) -> redis.Redis:
 
 
 def make_cache_client(settings: Settings) -> CacheClient:
-    """Create exact match cache client."""
+    """Create exact match cache client with automatic local in-memory fallback."""
     try:
         redis_client = make_redis_client(settings)
         cache_client = CacheClient(redis_client, settings.redis)
         logger.info("Exact match cache client created successfully")
         return cache_client
     except Exception as e:
-        logger.error(f"Failed to create cache client: {e}")
-        raise
+        logger.warning(f"Failed to create Redis client ({e}). Falling back to local in-memory caching.")
+        # Fall back to self-contained InMemoryRedis client
+        mock_client = InMemoryRedis()
+        return CacheClient(mock_client, settings.redis)

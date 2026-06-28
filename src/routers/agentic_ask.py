@@ -27,10 +27,10 @@ router = APIRouter(prefix="/api/v1", tags=["agentic-rag"])
 async def ask_agentic(
     request: AskRequest,
     agentic_rag: AgenticRAGDep,
-    user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
-    cache_client: CacheDep = None,
+    user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
+    cache_client: CacheDep,
 ) -> AgenticAskResponse:
     """
     Agentic RAG endpoint with intelligent retrieval, query refinement, and enterprise access control.
@@ -176,8 +176,8 @@ async def ask_agentic(
 async def submit_feedback(
     request: FeedbackRequest,
     langfuse_tracer: LangfuseDep,
-    user: User = UserDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
+    user: UserDep,
+    audit_logger: AuditLoggerDep,
 ) -> FeedbackResponse:
     """
     Submit user feedback for an agentic RAG response with audit logging.

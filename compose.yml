@@ -1,6 +1,17 @@
-version: '3.8'
-
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: enterprise-doc-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - rag-network
+
   # API service
   api:
     build: .
@@ -115,7 +126,7 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - REDIS__HOST=redis
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/dag:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
       - ./src:/opt/airflow/src
     ports:

@@ -17,15 +17,15 @@ router = APIRouter(prefix="/api/v1/admin/audit", tags=["admin-audit"])
 
 @router.get("/logs")
 async def get_audit_logs(
+    user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     start_date: Optional[datetime] = Query(None, description="Start date for log filtering (ISO format)"),
     end_date: Optional[datetime] = Query(None, description="End date for log filtering (ISO format)"),
     user_id: Optional[str] = Query(None, description="Filter logs by user ID"),
     event_type: Optional[str] = Query(None, description="Filter logs by event type"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of logs to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Get audit logs for administrative review.
     
@@ -86,12 +86,12 @@ async def get_audit_logs(
 
 @router.get("/export")
 async def export_audit_logs(
+    user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     start_date: datetime = Query(..., description="Start date for export"),
     end_date: datetime = Query(..., description="End date for export"),
     format: str = Query("json", regex="^(json|csv)$", description="Export format"),
-    user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Export audit logs for compliance reporting or GDPR requests.
     
@@ -196,10 +196,10 @@ async def export_audit_logs(
 
 @router.post("/retention/apply")
 async def apply_retention_policies(
+    user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     dry_run: bool = Query(False, description="Preview retention actions without executing"),
-    user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Manually trigger retention policy enforcement.
     
@@ -272,10 +272,10 @@ async def apply_retention_policies(
 
 @router.get("/stats")
 async def get_audit_stats(
+    user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
-    user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Get audit statistics for compliance reporting.
     
@@ -359,10 +359,10 @@ async def get_audit_stats(
 
 @router.get("/gdpr/export")
 async def gdpr_data_export(
+    requesting_user: UserDep,
+    access_control: AccessControlDep,
+    audit_logger: AuditLoggerDep,
     user_id: str = Query(..., description="User ID for GDPR data export request"),
-    requesting_user: User = UserDep,
-    access_control: AccessControlService = AccessControlDep,
-    audit_logger: AuditLogger = AuditLoggerDep,
 ):
     """Export all data related to a specific user for GDPR compliance.
     

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, String, Text, Integer
+from sqlalchemy import Column, DateTime, JSON, String
 from sqlalchemy.dialects.postgresql import UUID
 from src.db.interfaces.postgresql import Base
 

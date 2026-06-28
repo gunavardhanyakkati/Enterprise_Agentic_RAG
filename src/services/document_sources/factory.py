@@ -20,9 +20,13 @@ def make_document_source() -> BaseDocumentSource:
     source_type = settings.enterprise_source.source_type
     
     if source_type == "filesystem":
-        from src.services.document_sources.filesystem_source import FilesystemSource
-        source = FilesystemSource(settings)
-        source.connect()
+        from src.services.document_sources.filesystem_source import FilesystemDocumentSource
+
+        source = FilesystemDocumentSource(
+            base_path=settings.enterprise_source.filesystem_path,
+            supported_extensions=[".pdf", ".docx", ".txt", ".md", ".pptx", ".xlsx"],
+        )
+        source.validate_source()
         logger.info(f"Created filesystem document source at: {settings.enterprise_source.filesystem_path}")
         return source
     elif source_type == "s3":

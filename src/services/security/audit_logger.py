@@ -23,12 +23,12 @@ class AuditLogger:
         self.enabled = self.settings.security.rbac_enabled
         logger.info(f"Audit logger initialized (enabled: {self.enabled})")
 
-    def _log_event(self, event_type: str, user: User, resource: str, details: Dict[str, Any]):
+    def _log_event(self, event_type: str, user: Optional[Any], resource: str, details: Dict[str, Any]):
         """Internal method to log audit events.
         
         Args:
             event_type: Type of audit event
-            user: The user performing the action
+            user: The user performing the action (User object, user_id string, or None)
             resource: Resource identifier (e.g., 'document:abc123')
             details: Additional event details
         """
@@ -36,11 +36,22 @@ class AuditLogger:
             return
 
         try:
+            user_id = "system"
+            username = "system"
+            
+            if user:
+                if isinstance(user, str):
+                    user_id = user
+                    username = user
+                else:
+                    user_id = getattr(user, "id", getattr(user, "user_id", "system"))
+                    username = getattr(user, "username", "system")
+
             audit_record = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "event_type": event_type,
-                "user_id": user.id if user else "system",
-                "username": user.username if user else "system",
+                "user_id": user_id,
+                "username": username,
                 "resource": resource,
                 "details": details,
             }
@@ -51,10 +62,9 @@ class AuditLogger:
             # Also send to Langfuse if available
             if self.langfuse_tracer and self.langfuse_tracer.client:
                 try:
-                    trace_id = self.langfuse_tracer.get_trace_id()
                     self.langfuse_tracer.client.event(
                         name=event_type,
-                        user_id=user.id if user else "system",
+                        user_id=user_id,
                         metadata=audit_record,
                     )
                 except Exception as e:
@@ -64,13 +74,23 @@ class AuditLogger:
             # Never let audit logging break the main application
             logger.error(f"Failed to log audit event: {e}", exc_info=True)
 
-    def log_document_access(self, user: User, document_id: str, action: str = "read"):
+    def log_audit_event(self, event_type: str, user: Any, resource: str, details: Dict[str, Any]):
+        """Log a generic system audit event."""
+        self._log_event(
+            event_type=event_type,
+            user=user,
+            resource=resource,
+            details=details,
+        )
+
+    def log_document_access(self, user: Any, document_id: str, action: str = "read", details: Optional[Dict[str, Any]] = None):
         """Log when a user accesses a document.
         
         Args:
-            user: The authenticated user
+            user: The authenticated user or user_id string
             document_id: ID of the accessed document
             action: Type of access (read, search, download)
+            details: Optional dictionary of access parameters
         """
         self._log_event(
             event_type="document_access",
@@ -78,16 +98,16 @@ class AuditLogger:
             resource=f"document:{document_id}",
             details={
                 "action": action,
-                "access_level": user.access_levels,
+                **(details or {}),
             },
         )
-        logger.debug(f"Logged document access: user={user.username}, doc={document_id}, action={action}")
+        logger.debug(f"Logged document access: user={user if isinstance(user, str) else getattr(user, 'username', 'system')}, doc={document_id}, action={action}")
 
-    def log_document_modification(self, user: User, document_id: str, action: str, changes: Optional[Dict[str, Any]] = None):
+    def log_document_modification(self, user: Any, document_id: str, action: str, changes: Optional[Dict[str, Any]] = None):
         """Log document creation, update, or deletion.
         
         Args:
-            user: The authenticated user
+            user: The authenticated user or user_id string
             document_id: ID of the modified document
             action: create, update, delete, version
             changes: Dictionary of changes made
@@ -101,7 +121,7 @@ class AuditLogger:
                 "changes": changes or {},
             },
         )
-        logger.info(f"Logged document modification: user={user.username}, doc={document_id}, action={action}")
+        logger.info(f"Logged document modification: user={user if isinstance(user, str) else getattr(user, 'username', 'system')}, doc={document_id}, action={action}")
 
     def log_security_event(self, user: Optional[User], event: str, reason: str, severity: str = "medium"):
         """Log security-related events like failed auth or access denied.

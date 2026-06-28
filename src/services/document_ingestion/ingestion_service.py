@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -318,4 +318,8 @@ class DocumentIngestionService:
             stored_count = 0
         
         return stored_count
+
+
+# Alias for backward compatibility with routers
+IngestionService = DocumentIngestionService
 

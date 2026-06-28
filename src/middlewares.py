@@ -64,7 +64,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         user: Optional[User] = getattr(request.state, "user", None)
 
         # Allow access if auth is disabled or user is None (public endpoints)
-        if not access_control.settings.rbac_enabled or user is None:
+        if not access_control.security_settings.rbac_enabled or user is None:
             return await call_next(request)
 
         # For search endpoints, we'll filter results at the service layer

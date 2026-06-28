@@ -22,8 +22,13 @@ class DocumentResponse(DocumentBase):
     parser_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional parser metadata")
     content_processed: bool = Field(default=False, description="Whether content was successfully processed")
     content_processing_date: Optional[datetime] = Field(None, description="When content was processed")
-    
-    # Timestamps
+
+    summary: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    extracted_metadata: Optional[Dict[str, Any]] = None
+    compliance_report: Optional[Dict[str, Any]] = None
+    agent_executions: Optional[List[Dict[str, Any]]] = None
+
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 

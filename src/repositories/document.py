@@ -14,7 +14,8 @@ class DocumentRepository:
         self.session = session
 
     def create(self, document: DocumentCreate) -> Document:
-        db_document = Document(**document.model_dump())
+        data = document.model_dump(exclude={"file_content"})
+        db_document = Document(**data)
         self.session.add(db_document)
         self.session.commit()
         self.session.refresh(db_document)
@@ -164,8 +165,7 @@ class DocumentRepository:
         existing_document = self.get_by_document_id(document_create.document_id)
         
         if existing_document:
-            # Update existing document
-            for key, value in document_create.model_dump(exclude_unset=True).items():
+            for key, value in document_create.model_dump(exclude_unset=True, exclude={"file_content"}).items():
                 setattr(existing_document, key, value)
             return self.update(existing_document)
         else:
